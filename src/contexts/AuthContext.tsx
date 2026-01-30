@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { auth } from '../firebase/config';
 
 interface User {
   uid: string;
@@ -30,26 +29,45 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const unsubscribe = auth.onAuthStateChanged((firebaseUser) => {
-      if (firebaseUser) {
-        setUser({
-          uid: firebaseUser.uid,
-          email: firebaseUser.email,
-          displayName: firebaseUser.displayName,
-        });
-      } else {
-        setUser(null);
+    // Check if user is logged in on mount
+    const token = localStorage.getItem('auth_token');
+    const userData = localStorage.getItem('user_data');
+    
+    if (token && userData) {
+      try {
+        setUser(JSON.parse(userData));
+      } catch (error) {
+        console.error('Error parsing user data:', error);
+        localStorage.removeItem('auth_token');
+        localStorage.removeItem('user_data');
       }
-      setLoading(false);
-    });
-
-    return unsubscribe;
+    }
+    setLoading(false);
   }, []);
 
   const login = async (email: string, password: string) => {
     setLoading(true);
     try {
-      // Your login logic here
+      const response = await fetch('/.netlify/functions/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Login failed');
+      }
+
+      const data = await response.json();
+      
+      // Store token and user data
+      localStorage.setItem('auth_token', data.token);
+      localStorage.setItem('user_data', JSON.stringify(data.user));
+      
+      setUser(data.user);
       console.log('Login successful');
     } catch (error) {
       console.error('Login error:', error);
@@ -62,7 +80,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signup = async (email: string, password: string, name: string) => {
     setLoading(true);
     try {
-      // Your signup logic here
+      const response = await fetch('/.netlify/functions/signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, password, name }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Signup failed');
+      }
+
+      const data = await response.json();
+      
+      // Store token and user data
+      localStorage.setItem('auth_token', data.token);
+      localStorage.setItem('user_data', JSON.stringify(data.user));
+      
+      setUser(data.user);
       console.log('Signup successful');
     } catch (error) {
       console.error('Signup error:', error);
@@ -75,7 +112,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     setLoading(true);
     try {
-      await auth.signOut();
+      // Clear local storage
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('user_data');
+      
+      setUser(null);
+      console.log('Logout successful');
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
