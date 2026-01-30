@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import chatService from '../services/chatService';
@@ -12,6 +12,25 @@ const ChatRoom: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  const loadMessages = useCallback(async () => {
+    try {
+      const roomMessages = await chatService.getRoomMessages(roomId!);
+      setMessages(roomMessages);
+    } catch (error) {
+      console.error('Error loading messages:', error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [roomId]);
+
+  const setupRealtimeSubscription = useCallback(() => {
+    const subscription = chatService.subscribeToRoom(roomId!, (newMessage) => {
+      setMessages(prev => [...prev, newMessage]);
+    });
+
+    return subscription;
+  }, [roomId]);
+
   useEffect(() => {
     if (!roomId || !user) return;
 
@@ -21,26 +40,7 @@ const ChatRoom: React.FC = () => {
     return () => {
       // Cleanup subscription
     };
-  }, [roomId, user]);
-
-  const loadMessages = async () => {
-    try {
-      const roomMessages = await chatService.getRoomMessages(roomId!);
-      setMessages(roomMessages);
-    } catch (error) {
-      console.error('Error loading messages:', error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const setupRealtimeSubscription = () => {
-    const subscription = chatService.subscribeToRoom(roomId!, (newMessage) => {
-      setMessages(prev => [...prev, newMessage]);
-    });
-
-    return subscription;
-  };
+  }, [roomId, user, loadMessages, setupRealtimeSubscription]);
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault();
